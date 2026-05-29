@@ -1,0 +1,42 @@
+# Runtime secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+__pycache__/
+*.pyc
+*.dmp
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+server-test.out
+server-test.err
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Browser profiles and captures generated during local testing
+chrome-profile-*/
+qa_*.png
+
+# Build outputs
+build/
+dist/
+release/
+installer-output/
+dist.zip
+KoreanVietnameseTranslator.spec
+
+# Local app data exports accidentally copied into project
+*.dpapi
+*.log
+
+# Local planning/reference notes that should not be published
+.local_archive/
+
+# Stray local scratch file
+WhisperX_Project

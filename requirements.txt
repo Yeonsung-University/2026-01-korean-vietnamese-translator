@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+numpy
+torch
+pyaudio
+pyaudiowpatch
+faster-whisper
+groq
+qrcode[pil]

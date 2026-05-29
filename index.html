@@ -1,0 +1,2253 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phiên Dịch Trực Tiếp · 실시간 한→베 번역</title>
+  <meta name="description" content="실시간 한국어→베트남어 강의 자막 시스템" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#063f2d" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:             #06091a;
+      --surface:        #0d1128;
+      --card:           #141930;
+      --card-hover:     #1a2040;
+      --border:         rgba(255,255,255,0.07);
+      --border-accent:  rgba(99,102,241,0.45);
+      --ko-text:        #94a3b8;
+      --vn-text:        #fbbf24;
+      --vn-label-bg:    rgba(251,191,36,0.12);
+      --accent:         #6366f1;
+      --accent2:        #818cf8;
+      --accent-glow:    rgba(99,102,241,0.3);
+      --idle-color:     #22c55e;
+      --rec-color:      #ef4444;
+      --rec-glow:       rgba(239,68,68,0.3);
+      --proc-color:     #f97316;
+      --muted:          #3d4a60;
+      --host-color:     #a78bfa;
+      --guest-color:    #34d399;
+      --font-vn:        'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
+      --font-ko:        'Malgun Gothic', 'Segoe UI', Arial, sans-serif;
+      --font-ui:        'Segoe UI', Arial, sans-serif;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: #e2e8f0; font-family: var(--font-vn); overflow: hidden; }
+
+    /* ══════════════════════════════════════════════
+       ROLE SELECT SCREEN
+    ══════════════════════════════════════════════ */
+    #role-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at 50% 40%, #1a1f4e 0%, var(--bg) 70%);
+    }
+    #role-screen.hidden { display: none; }
+
+    .role-box {
+      width: 480px; max-width: 95vw;
+      text-align: center;
+      animation: fadeInUp .5s cubic-bezier(.34,1.56,.64,1);
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(40px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .role-logo {
+      width: 72px; height: 72px; margin: 0 auto 24px;
+      background: linear-gradient(135deg, #6366f1, #818cf8);
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+      box-shadow: 0 0 40px rgba(99,102,241,0.5);
+    }
+    .role-title {
+      font-family: var(--font-ko);
+      font-size: 26px; font-weight: 700;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, #e2e8f0, #818cf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .role-sub { font-size: 14px; color: var(--muted); margin-bottom: 40px; }
+
+    .role-cards {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      margin-bottom: 20px;
+    }
+    .role-card {
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 20px;
+      cursor: pointer;
+      transition: all .25s ease;
+      position: relative; overflow: hidden;
+    }
+    .role-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(circle at 50% 0%, var(--c) 0%, transparent 70%);
+      opacity: 0;
+      transition: opacity .3s;
+    }
+    .role-card:hover::before { opacity: 0.12; }
+    .role-card:hover { border-color: var(--c); transform: translateY(-4px); box-shadow: 0 12px 40px -8px var(--c); }
+    .role-card.host { --c: var(--host-color); }
+    .role-card.guest { --c: var(--guest-color); }
+
+    .role-icon { font-size: 40px; margin-bottom: 12px; }
+    .role-name {
+      font-family: var(--font-ko);
+      font-size: 18px; font-weight: 700; margin-bottom: 8px;
+    }
+    .role-card.host .role-name { color: var(--host-color); }
+    .role-card.guest .role-name { color: var(--guest-color); }
+    .role-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+    /* ══════════════════════════════════════════════
+       APPLICATION SHELL
+    ══════════════════════════════════════════════ */
+    #app {
+      display: flex; flex-direction: column;
+      height: 100vh; max-width: 900px; margin: 0 auto;
+      opacity: 0; transition: opacity .4s;
+    }
+    #app.visible { opacity: 1; }
+
+    /* ── Header ── */
+    #header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 22px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0; gap: 12px;
+    }
+    #header-left { display: flex; align-items: center; gap: 12px; }
+    #logo {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #6366f1, #818cf8);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+      box-shadow: 0 0 14px var(--accent-glow);
+    }
+    #header-title { font-family: var(--font-ko); font-size: 15px; font-weight: 700; color: #e2e8f0; }
+    #header-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+    #header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+    .role-badge {
+      font-family: var(--font-ui); font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 999px; letter-spacing: .05em;
+    }
+    .role-badge.host { background: rgba(167,139,250,0.15); color: var(--host-color); border: 1px solid rgba(167,139,250,0.3); }
+    .role-badge.guest { background: rgba(52,211,153,0.12); color: var(--guest-color); border: 1px solid rgba(52,211,153,0.3); }
+
+    #count-pill {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 999px; padding: 3px 12px;
+      font-size: 11px; color: var(--muted); white-space: nowrap;
+    }
+    #count-pill b { color: #e2e8f0; }
+
+    #live-badge {
+      display: flex; align-items: center; gap: 5px;
+      background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 999px; padding: 3px 10px;
+      font-size: 11px; font-weight: 700; color: var(--rec-color); letter-spacing: .05em;
+    }
+    #live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rec-color); animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.3); } }
+
+    #conn-indicator {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--muted); transition: background .4s, box-shadow .4s;
+    }
+    #conn-indicator.on  { background: var(--idle-color); box-shadow: 0 0 7px var(--idle-color); }
+    #conn-indicator.off { background: var(--rec-color); }
+
+    /* ── Body split ── */
+    #body {
+      flex: 1; display: flex; overflow: hidden;
+    }
+
+    /* ── Host sidebar (settings) ── */
+    #host-sidebar {
+      width: 260px; flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 16px;
+      gap: 14px;
+      overflow-y: auto;
+    }
+    #host-sidebar.hidden { display: none; }
+
+    .sidebar-section {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px;
+    }
+    .sidebar-title {
+      font-family: var(--font-ui); font-size: 11px; font-weight: 700;
+      color: var(--muted); letter-spacing: .08em; text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .api-form { display: flex; flex-direction: column; gap: 9px; }
+    .api-input-row { display: flex; gap: 8px; }
+    #apiKeyInput {
+      width: 100%; min-width: 0;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: #e2e8f0;
+      font-family: var(--font-ui);
+      font-size: 12px;
+      padding: 10px 11px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    #apiKeyInput:focus {
+      border-color: var(--accent2);
+      box-shadow: 0 0 0 3px rgba(129,140,248,0.12);
+    }
+    #apiKeyInput::placeholder { color: #475569; }
+    .api-btn {
+      flex-shrink: 0;
+      border: 1px solid var(--border-accent);
+      background: rgba(99,102,241,0.16);
+      color: #c7d2fe;
+      border-radius: 10px;
+      padding: 0 11px;
+      font-family: var(--font-ko);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .2s, border-color .2s, background .2s;
+    }
+    .api-btn:hover {
+      transform: translateY(-1px);
+      border-color: var(--accent2);
+      background: rgba(99,102,241,0.24);
+    }
+    .api-status {
+      display: flex; align-items: center; gap: 7px;
+      min-height: 20px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .api-status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .api-status.ready { color: var(--idle-color); }
+    .api-status.ready .api-status-dot {
+      background: var(--idle-color);
+      box-shadow: 0 0 7px var(--idle-color);
+    }
+    .api-status.pending { color: var(--accent2); }
+    .api-status.pending .api-status-dot { background: var(--accent2); }
+    .api-status.error { color: var(--rec-color); }
+    .api-status.error .api-status-dot {
+      background: var(--rec-color);
+      box-shadow: 0 0 7px var(--rec-color);
+    }
+    .guest-url-card {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+    .guest-url {
+      min-height: 39px;
+      padding: 10px 11px;
+      background: rgba(52,211,153,0.07);
+      border: 1px solid rgba(52,211,153,0.24);
+      border-radius: 10px;
+      color: #bbf7d0;
+      font-family: var(--font-ui);
+      font-size: 12px;
+      line-height: 1.45;
+      word-break: break-all;
+    }
+    .guest-url-actions {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .guest-url-note {
+      color: var(--muted);
+      font-family: var(--font-ko);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+    .copy-btn {
+      border: 1px solid rgba(52,211,153,0.28);
+      background: rgba(52,211,153,0.12);
+      color: #86efac;
+      border-radius: 10px;
+      padding: 8px 11px;
+      font-family: var(--font-ko);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .2s, border-color .2s, background .2s;
+    }
+    .copy-btn:hover {
+      transform: translateY(-1px);
+      border-color: #86efac;
+      background: rgba(52,211,153,0.2);
+    }
+
+    .mini-label {
+      color: #d8e2f3;
+      font-family: var(--font-ko);
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .url-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .url-actions-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .url-actions-row .guest-url {
+      flex: 1;
+      min-width: 0;
+    }
+    .qr-box {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid rgba(52,211,153,0.24);
+      border-radius: 12px;
+      background: rgba(52,211,153,0.06);
+    }
+    #guestQr {
+      width: 92px;
+      height: 92px;
+      border-radius: 8px;
+      background: #fff;
+      padding: 5px;
+    }
+    .ip-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .ip-chip {
+      border: 1px solid rgba(148,163,184,0.24);
+      background: rgba(148,163,184,0.08);
+      color: #dbeafe;
+      border-radius: 8px;
+      padding: 7px 8px;
+      text-align: left;
+      font-size: 11px;
+      cursor: pointer;
+      word-break: break-all;
+    }
+    .ip-chip.selected {
+      border-color: rgba(52,211,153,0.55);
+      color: #86efac;
+      background: rgba(52,211,153,0.12);
+    }
+    .host-stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .host-stat {
+      padding: 9px;
+      border: 1px solid rgba(148,163,184,0.18);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.035);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .host-stat b {
+      display: block;
+      color: #f8fafc;
+      font-size: 15px;
+      margin-top: 3px;
+    }
+    .select-control {
+      width: 100%;
+      min-width: 0;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: #e2e8f0;
+      font-family: var(--font-ko);
+      font-size: 12px;
+      padding: 9px 10px;
+      outline: none;
+    }
+    .select-control option {
+      color: #0f172a;
+    }
+    .volume-meter {
+      height: 9px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(148,163,184,0.16);
+      border: 1px solid rgba(148,163,184,0.18);
+      margin-top: 8px;
+    }
+    #volumeFill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #22c55e, #fbbf24, #ef4444);
+      transition: width .12s linear;
+    }
+    .diag-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    #diagnosticsBody {
+      margin-top: 10px;
+      max-height: 220px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: Consolas, 'Segoe UI Mono', monospace;
+      font-size: 10.5px;
+      color: #cbd5e1;
+      background: rgba(2,6,23,0.45);
+      border: 1px solid rgba(148,163,184,0.16);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .connection-help {
+      margin: 12px 18px 0;
+      padding: 14px;
+      border: 1px solid rgba(239,68,68,0.38);
+      border-radius: 12px;
+      background: rgba(127,29,29,0.22);
+      color: #fecaca;
+      font-family: var(--font-ko);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .connection-help.hidden { display: none; }
+    .connection-help button {
+      margin-top: 10px;
+    }
+
+    .ctrl-row { margin-bottom: 14px; }
+    .ctrl-row:last-child { margin-bottom: 0; }
+    .ctrl-label {
+      display: flex; justify-content: space-between; align-items: center;
+      font-family: var(--font-ko); font-size: 12px;
+      color: #94a3b8; margin-bottom: 7px;
+    }
+    .ctrl-val {
+      font-family: var(--font-ui); font-size: 12px; font-weight: 700;
+      color: var(--accent2);
+    }
+    input[type=range] {
+      width: 100%; height: 4px; appearance: none;
+      background: var(--border); border-radius: 4px; cursor: pointer;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      appearance: none; width: 14px; height: 14px;
+      background: var(--accent); border-radius: 50%;
+      box-shadow: 0 0 6px var(--accent-glow); cursor: pointer;
+      transition: transform .15s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+
+    /* 상태 표시 (호스트 전용) */
+    #status-bar {
+      padding: 8px 14px;
+      background: rgba(99,102,241,0.06);
+      border: 1px solid var(--border-accent);
+      border-radius: 10px;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; min-height: 38px;
+    }
+    #status-bar.hidden { display: none; }
+
+    /* 마이크 버튼 */
+    #mic-section { display: flex; flex-direction: column; gap: 8px; }
+    .mic-btn {
+      width: 100%; background: var(--accent); color: white;
+      border: none; padding: 11px 16px; border-radius: 12px;
+      font-family: var(--font-ko); font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all .25s ease;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .mic-btn.muted { background: var(--rec-color); }
+    .mic-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+    .mic-btn:active { transform: translateY(0); }
+
+    /* 다운로드 버튼 */
+    .dl-btn {
+      width: 100%; background: transparent;
+      border: 1px solid var(--border); color: #94a3b8;
+      padding: 9px 16px; border-radius: 12px;
+      font-family: var(--font-Ko); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: all .2s ease;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .dl-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+    /* ── Chat area ── */
+    #chat-wrap {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* 게스트 상단 배너 */
+    #guest-banner {
+      padding: 10px 22px;
+      background: linear-gradient(90deg, rgba(52,211,153,0.08), transparent);
+      border-bottom: 1px solid rgba(52,211,153,0.15);
+      font-size: 13px; color: var(--guest-color);
+      font-weight: 500; flex-shrink: 0;
+      display: flex; align-items: center; gap: 8px;
+    }
+    #guest-banner.hidden { display: none; }
+
+    #chat {
+      flex: 1; overflow-y: auto;
+      padding: 18px 22px 28px;
+      display: flex; flex-direction: column; gap: 12px;
+      scroll-behavior: smooth;
+    }
+    #chat-top { flex: 1; }
+
+    #chat::-webkit-scrollbar { width: 5px; }
+    #chat::-webkit-scrollbar-track { background: transparent; }
+    #chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* Empty state */
+    #empty {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px; padding: 60px 24px; text-align: center;
+    }
+    .e-icon { font-size: 48px; opacity: 0.35; }
+    .e-title { font-family: var(--font-ko); font-size: 16px; font-weight: 700; color: #e2e8f0; opacity: 0.35; }
+    .e-sub { font-size: 13px; color: var(--muted); line-height: 1.7; }
+
+    /* Bubble */
+    .bubble {
+      background: var(--card); border: 1px solid var(--border);
+      border-left: 3px solid var(--accent); border-radius: 14px;
+      padding: 16px 20px;
+      animation: slideUp .38s cubic-bezier(.34,1.56,.64,1) forwards;
+      opacity: 0; transition: background .2s, box-shadow .2s;
+    }
+    .bubble:hover { background: var(--card-hover); box-shadow: 0 4px 24px var(--accent-glow); }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .row-ko { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+    .badge {
+      flex-shrink: 0; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+      padding: 2px 7px; border-radius: 6px; margin-top: 4px;
+    }
+    .badge-ko { background: rgba(255,255,255,0.08); color: #64748b; font-family: var(--font-ko); }
+    .badge-vn { background: var(--vn-label-bg); color: #d97706; }
+    .text-ko { font-family: var(--font-ko); font-size: 15px; line-height: 1.7; color: var(--ko-text); }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+    .row-vn { display: flex; align-items: flex-start; gap: 10px; }
+    .text-vn { font-family: var(--font-vn); font-size: 21px; font-weight: 600; line-height: 1.65; color: var(--vn-text); }
+    .meta { margin-top: 12px; display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+    .meta-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--muted); }
+
+    /* Status helpers */
+    .waveform { display: flex; align-items: center; gap: 2px; }
+    .waveform span { display: block; width: 3px; background: var(--rec-color); border-radius: 3px; animation: wv 1s ease-in-out infinite; }
+    .waveform span:nth-child(1) { height: 7px; animation-delay: 0s; }
+    .waveform span:nth-child(2) { height: 16px; animation-delay: .12s; }
+    .waveform span:nth-child(3) { height: 10px; animation-delay: .24s; }
+    .waveform span:nth-child(4) { height: 20px; animation-delay: .36s; }
+    .waveform span:nth-child(5) { height: 9px; animation-delay: .48s; }
+    @keyframes wv { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+    .spinner { width: 14px; height: 14px; flex-shrink: 0; border: 2px solid var(--border); border-top-color: var(--proc-color); border-radius: 50%; animation: spin .75s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ══════════════════════════════════════════════
+       Responsive interface overrides
+    ══════════════════════════════════════════════ */
+    :root {
+      --bg: #030a17;
+      --surface: #07111f;
+      --surface-2: #0a1728;
+      --card: #081525;
+      --card-hover: #0d1d33;
+      --border: rgba(156, 174, 204, 0.24);
+      --border-strong: rgba(196, 210, 236, 0.42);
+      --ko-text: #f5f7fb;
+      --vn-text: #ffd400;
+      --muted: #9aa8bd;
+      --accent: #7c4dff;
+      --accent2: #ad8cff;
+      --host-color: #a787ff;
+      --guest-color: #44e092;
+      --panel-radius: 18px;
+      --small-radius: 9px;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100vh;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at 22% 10%, rgba(73, 46, 167, 0.18), transparent 30%),
+        radial-gradient(circle at 82% 0%, rgba(17, 135, 96, 0.12), transparent 28%),
+        linear-gradient(180deg, #020814 0%, #04101e 100%);
+      overflow: hidden;
+    }
+
+    body {
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background:
+        radial-gradient(circle at 22% 10%, rgba(73, 46, 167, 0.18), transparent 30%),
+        radial-gradient(circle at 82% 0%, rgba(17, 135, 96, 0.12), transparent 28%),
+        linear-gradient(180deg, #020814 0%, #04101e 100%);
+    }
+
+    button, input { font: inherit; }
+
+    #role-screen {
+      padding: 32px;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(123, 83, 255, 0.2), transparent 28%),
+        linear-gradient(180deg, #020816 0%, #05111f 100%);
+    }
+
+    .role-box {
+      width: min(460px, 100%);
+      padding: 36px 34px 32px;
+      background: rgba(6, 15, 30, 0.9);
+      border: 1px solid var(--border-strong);
+      border-radius: 20px;
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+
+    .role-logo {
+      width: 82px;
+      height: 82px;
+      margin-bottom: 26px;
+      background: linear-gradient(145deg, #c0a8ff 0%, #6640d8 55%, #251462 100%);
+      border-radius: 50%;
+      box-shadow: 0 0 0 10px rgba(124,77,255,0.08), 0 20px 46px rgba(124,77,255,0.3);
+    }
+
+    .role-title {
+      font-size: 30px;
+      line-height: 1.25;
+      letter-spacing: 0;
+      background: none;
+      -webkit-text-fill-color: #f8fbff;
+    }
+
+    .role-sub {
+      margin: 10px 0 28px;
+      color: #c7d0df;
+      font-size: 16px;
+    }
+
+    .role-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      margin: 0;
+    }
+
+    .role-card {
+      display: grid;
+      grid-template-columns: 76px 1fr 22px;
+      align-items: center;
+      gap: 18px;
+      min-height: 142px;
+      padding: 22px 22px 22px 18px;
+      text-align: left;
+      border-radius: 16px;
+      border-width: 1px;
+      overflow: hidden;
+    }
+
+    .role-card::after {
+      content: '›';
+      color: rgba(255,255,255,0.75);
+      font-size: 42px;
+      line-height: 1;
+    }
+
+    .role-card.host {
+      background: linear-gradient(135deg, rgba(54, 33, 112, 0.92), rgba(30, 21, 64, 0.9));
+      border-color: rgba(166, 126, 255, 0.68);
+    }
+
+    .role-card.guest {
+      background: linear-gradient(135deg, rgba(7, 58, 42, 0.94), rgba(5, 38, 38, 0.92));
+      border-color: rgba(68, 224, 146, 0.62);
+    }
+
+    .role-icon {
+      width: 70px;
+      height: 70px;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-size: 36px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.22);
+    }
+
+    .role-name {
+      margin-bottom: 8px;
+      font-size: 24px;
+      line-height: 1.2;
+    }
+
+    .role-desc {
+      color: #d7deeb;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .role-box::after {
+      content: '같은 Wi-Fi에서 접속\A Kết nối cùng Wi‑Fi';
+      white-space: pre;
+      display: block;
+      margin-top: 28px;
+      color: rgba(226, 232, 240, 0.75);
+      font: 600 15px/1.6 var(--font-vn);
+    }
+
+    #app {
+      width: min(1180px, calc(100vw - 32px));
+      max-width: none;
+      height: calc(100vh - 34px);
+      margin: 17px auto;
+      background: rgba(4, 12, 24, 0.96);
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      box-shadow: 0 26px 80px rgba(0, 0, 0, 0.48);
+      overflow: hidden;
+    }
+
+    #header {
+      min-height: 86px;
+      padding: 16px 22px;
+      background: linear-gradient(180deg, rgba(12, 24, 42, 0.98), rgba(6, 16, 30, 0.94));
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    #header-left { gap: 16px; min-width: 0; }
+
+    #logo {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      background: linear-gradient(145deg, #805bff, #3a226f);
+      font-size: 24px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 0 26px rgba(124,77,255,0.24);
+    }
+
+    #header-title {
+      font-size: 25px;
+      line-height: 1.15;
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    #header-sub {
+      margin-top: 5px;
+      font-size: 15px;
+      color: #bac5d7;
+    }
+
+    #header-right {
+      gap: 14px;
+      flex-wrap: nowrap;
+    }
+
+    .role-badge {
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 18px;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    #count-pill {
+      min-width: 86px;
+      padding: 10px 12px;
+      border-radius: 9px;
+      border-color: rgba(140, 160, 190, 0.24);
+      color: #f6f8fc;
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.2;
+      white-space: normal;
+    }
+
+    #count-pill b {
+      display: block;
+      margin-top: 2px;
+      font-size: 24px;
+      color: #ffffff;
+    }
+
+    #live-badge {
+      height: 44px;
+      padding: 0 17px;
+      border-radius: 9px;
+      background: rgba(126, 22, 35, 0.82);
+      border-color: rgba(255, 82, 105, 0.54);
+      color: #ffffff;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    #live-dot { width: 10px; height: 10px; }
+
+    #conn-indicator {
+      position: relative;
+      width: 12px;
+      height: 12px;
+      margin-left: 8px;
+    }
+
+    #conn-indicator::after {
+      content: '연결됨\A Kết nối';
+      white-space: pre;
+      position: absolute;
+      transform: translate(18px, -12px);
+      color: #dbe6f6;
+      font: 700 13px/1.2 var(--font-vn);
+      width: 78px;
+    }
+
+    #body {
+      gap: 14px;
+      padding: 12px;
+      background: #050d19;
+    }
+
+    #host-sidebar {
+      width: 312px;
+      padding: 0;
+      gap: 8px;
+      background: transparent;
+      border-right: none;
+    }
+
+    .sidebar-section {
+      position: relative;
+      padding: 12px 12px 12px 52px;
+      border-radius: 12px;
+      background: rgba(9, 19, 34, 0.96);
+      border: 1px solid rgba(143, 162, 192, 0.28);
+    }
+
+    #api-section-wrap::before,
+    #guest-link-wrap::before,
+    #mic-section-wrap::before {
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #07111f;
+      font: 800 19px/1 var(--font-ui);
+    }
+
+    #api-section-wrap::before { content: '1'; background: #9b7bff; }
+    #guest-link-wrap::before { content: '2'; background: #5aa0ff; }
+    #mic-section-wrap::before { content: '3'; background: #ff6262; }
+
+    #api-section-wrap { border-color: rgba(155, 123, 255, 0.62); }
+    #guest-link-wrap { border-color: rgba(72, 148, 255, 0.58); }
+    #mic-section-wrap { border-color: rgba(255, 82, 82, 0.55); }
+
+    .sidebar-title {
+      margin-bottom: 10px;
+      color: #ffffff;
+      text-transform: none;
+      letter-spacing: 0;
+      font: 800 17px/1.2 var(--font-ko);
+    }
+
+    .sidebar-title::after {
+      display: block;
+      margin-top: 2px;
+      color: #c3ccdb;
+      font: 500 13px/1.2 var(--font-vn);
+    }
+
+    #api-section-wrap .sidebar-title::after { content: 'Nhập API key'; }
+    #guest-link-wrap .sidebar-title::after { content: 'Liên kết khách'; }
+    #mic-section-wrap .sidebar-title::after { content: 'Bật micro'; }
+
+    #apiKeyInput,
+    .guest-url {
+      min-height: 38px;
+      border-radius: 8px;
+      background: #060d18;
+      border-color: rgba(171, 186, 210, 0.3);
+      color: #f8fafc;
+      font-size: 14px;
+    }
+
+    .api-input-row {
+      display: grid;
+      grid-template-columns: 1fr 46px 46px;
+      gap: 8px;
+    }
+
+    .api-btn,
+    .copy-btn,
+    .dl-btn {
+      border-radius: 8px;
+      min-height: 38px;
+      font-size: 14px;
+    }
+
+    .api-btn {
+      padding: 0 12px;
+      background: #4d35a8;
+      color: #ffffff;
+      border-color: rgba(173, 140, 255, 0.48);
+    }
+
+    .api-status {
+      justify-content: center;
+      color: #65f0a2;
+      font-weight: 800;
+    }
+
+    .guest-url {
+      background: #06121f;
+      color: #f1f7ff;
+    }
+
+    .guest-url-actions {
+      grid-template-columns: 1fr 78px;
+    }
+
+    .copy-btn {
+      background: #214fa7;
+      color: #ffffff;
+      border-color: rgba(93, 160, 255, 0.6);
+    }
+
+    #status-bar {
+      min-height: 35px;
+      padding: 7px 9px;
+      background: rgba(2, 8, 16, 0.9);
+      border-color: rgba(148, 163, 184, 0.24);
+      border-radius: 8px;
+    }
+
+    .mic-btn {
+      min-height: 46px;
+      border-radius: 9px;
+      background: #c3272e;
+      font-size: 17px;
+      box-shadow: 0 12px 24px rgba(195, 39, 46, 0.18);
+    }
+
+    .mic-btn.muted { background: #5d6475; }
+
+    .dl-btn {
+      justify-content: flex-start;
+      padding: 10px 14px;
+      background: rgba(15, 27, 45, 0.96);
+      border-color: rgba(148, 163, 184, 0.28);
+      color: #f4f7fb;
+      font-weight: 800;
+    }
+
+    #host-sidebar > .sidebar-section:last-of-type {
+      padding-left: 14px;
+    }
+
+    #host-sidebar > .sidebar-section:last-of-type .sidebar-title {
+      font-size: 15px;
+    }
+
+    .ctrl-row {
+      display: grid;
+      grid-template-columns: 1fr 112px;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .ctrl-label {
+      margin-bottom: 0;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      color: #c9d3e3;
+      font-size: 12px;
+    }
+
+    .ctrl-val { color: #e8eafe; }
+
+    input[type=range] {
+      height: 7px;
+      background: #263448;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      width: 17px;
+      height: 17px;
+      background: #c7b8ff;
+      box-shadow: 0 0 0 4px rgba(173, 140, 255, 0.12);
+    }
+
+    #chat-wrap {
+      min-width: 0;
+      background: transparent;
+    }
+
+    #guest-banner {
+      margin-bottom: 12px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(11, 89, 57, 0.92), rgba(7, 54, 46, 0.94));
+      border: 1px solid rgba(68, 224, 146, 0.32);
+      color: #d7ffe9;
+      font-size: 18px;
+      justify-content: center;
+    }
+
+    #chat {
+      padding: 0 0 8px;
+      gap: 12px;
+    }
+
+    #chat-top {
+      flex: 0 0 0;
+    }
+
+    #empty {
+      min-height: 100%;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 13px;
+      background: rgba(8, 18, 32, 0.8);
+    }
+
+    .e-icon { opacity: 0.7; }
+    .e-title { opacity: 0.75; font-size: 18px; }
+    .e-sub { color: #9facbf; }
+
+    .bubble {
+      border-radius: 13px;
+      border: 1px solid rgba(145, 163, 194, 0.3);
+      border-left: 0;
+      background: rgba(7, 17, 30, 0.98);
+      padding: 18px 20px 14px;
+      opacity: 0;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+
+    .bubble:hover {
+      background: rgba(10, 23, 40, 0.98);
+      box-shadow: 0 18px 38px rgba(0,0,0,0.22);
+    }
+
+    .row-ko,
+    .row-vn {
+      display: grid;
+      grid-template-columns: 98px 1fr;
+      gap: 14px;
+      align-items: flex-start;
+      margin: 0;
+    }
+
+    .badge {
+      width: max-content;
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-top: 2px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .badge-ko {
+      background: linear-gradient(90deg, #4d5868, #1f2d43);
+      color: #ffffff;
+    }
+
+    .badge-vn {
+      background: linear-gradient(90deg, #d72f36, #8d2027);
+      color: #fff6da;
+    }
+
+    .text-ko {
+      color: #f5f7fb;
+      font-size: 20px;
+      line-height: 1.55;
+    }
+
+    .divider {
+      margin: 16px 0;
+      border-top-color: rgba(171, 186, 210, 0.26);
+    }
+
+    .text-vn {
+      color: var(--vn-text);
+      font-size: 30px;
+      line-height: 1.35;
+      font-weight: 800;
+    }
+
+    .meta {
+      margin-top: 18px;
+      padding-left: 0;
+      color: #b5c0d0;
+      font-size: 14px;
+    }
+
+    body[data-role="guest"] #app {
+      width: min(430px, calc(100vw - 24px));
+      height: calc(100vh - 24px);
+      margin: 12px auto;
+      border-radius: 28px;
+      border: 7px solid #1a1a1d;
+      box-shadow: 0 24px 70px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.08);
+      background: #03101d;
+    }
+
+    body[data-role="guest"] #header {
+      min-height: 98px;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #074d32, #04382f);
+      border-bottom: 1px solid rgba(68, 224, 146, 0.25);
+      padding: 16px;
+    }
+
+    body[data-role="guest"] #header-left {
+      justify-content: center;
+      text-align: center;
+      width: 100%;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    body[data-role="guest"] #logo,
+    body[data-role="guest"] #header-right {
+      display: none;
+    }
+
+    body[data-role="guest"] #header-title {
+      color: #d7ffe9;
+      font-size: 24px;
+    }
+
+    body[data-role="guest"] #header-title::before {
+      content: '👥 ';
+    }
+
+    body[data-role="guest"] #header-sub {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 6px 18px;
+      border-radius: 8px;
+      border: 1px solid rgba(134, 239, 172, 0.55);
+      color: #ddffe9;
+      font-size: 15px;
+    }
+
+    body[data-role="guest"] #body {
+      padding: 10px;
+      display: block;
+      overflow: hidden;
+      background: #03101d;
+    }
+
+    body[data-role="guest"] #guest-banner {
+      display: none;
+    }
+
+    body[data-role="guest"] #chat-wrap,
+    body[data-role="guest"] #chat {
+      height: 100%;
+    }
+
+    body[data-role="guest"] #chat {
+      padding: 0 0 10px;
+      gap: 10px;
+    }
+
+    body[data-role="guest"] .bubble {
+      padding: 14px 13px;
+      border-radius: 10px;
+    }
+
+    body[data-role="guest"] .row-ko,
+    body[data-role="guest"] .row-vn {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    body[data-role="guest"] .text-ko {
+      font-size: 17px;
+      line-height: 1.45;
+    }
+
+    body[data-role="guest"] .text-vn {
+      font-size: 27px;
+      line-height: 1.22;
+    }
+
+    body[data-role="guest"] .meta {
+      display: none;
+    }
+
+    body[data-role="guest"] #empty {
+      min-height: auto;
+      margin-top: 10px;
+      padding: 18px;
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    @media (max-width: 900px) {
+      #app {
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+      }
+
+      #header {
+        align-items: flex-start;
+        flex-direction: column;
+        min-height: auto;
+      }
+
+      #header-title {
+        white-space: normal;
+        font-size: 22px;
+      }
+
+      #body {
+        flex-direction: column;
+      }
+
+      #host-sidebar {
+        width: 100%;
+        max-height: 48vh;
+      }
+
+      .ctrl-row {
+        grid-template-columns: 1fr;
+        gap: 7px;
+      }
+
+      .text-vn { font-size: 26px; }
+    }
+
+    @media (max-width: 520px) {
+      #role-screen { padding: 14px; }
+      .role-box { padding: 28px 20px; }
+      .role-card {
+        grid-template-columns: 62px 1fr 16px;
+        min-height: 124px;
+        gap: 14px;
+      }
+      .role-icon { width: 58px; height: 58px; }
+      .role-title { font-size: 27px; }
+      .role-name { font-size: 21px; }
+
+      body[data-role="guest"] #app {
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+      }
+    }
+
+    /* Responsive layout refinements */
+    #conn-indicator,
+    #conn-indicator.on,
+    #conn-indicator.off {
+      width: 82px;
+      height: 44px;
+      margin-left: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    #conn-indicator::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 17px;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    #conn-indicator.on::before {
+      background: var(--idle-color);
+      box-shadow: 0 0 8px var(--idle-color);
+    }
+
+    #conn-indicator.off::before {
+      background: var(--rec-color);
+      box-shadow: 0 0 8px var(--rec-color);
+    }
+
+    #conn-indicator::after {
+      left: 18px;
+      top: 8px;
+      transform: none;
+    }
+
+    #status-inner:empty::before {
+      content: '대기 / Chờ';
+      color: var(--idle-color);
+      font-weight: 800;
+    }
+
+    #apiStatusText:empty::before {
+      content: 'API 키 대기 중';
+    }
+
+    #host-sidebar {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(190, 204, 228, 0.5) transparent;
+    }
+
+    #host-sidebar::-webkit-scrollbar { width: 5px; }
+    #host-sidebar::-webkit-scrollbar-thumb {
+      background: rgba(190, 204, 228, 0.45);
+      border-radius: 999px;
+    }
+
+    body[data-role="guest"] #header-title {
+      white-space: normal;
+      font-size: 0;
+      line-height: 1.15;
+    }
+
+    body[data-role="guest"] #header-title::before {
+      content: '👥 ';
+      font-size: 20px;
+    }
+
+    body[data-role="guest"] #header-title::after {
+      content: '게스트 모드 / Chế độ khách';
+      font-size: 20px;
+    }
+
+    body[data-role="guest"] #header-sub {
+      font-size: 0;
+    }
+
+    body[data-role="guest"] #header-sub::after {
+      content: '읽기 전용 / Chỉ đọc';
+      font-size: 15px;
+    }
+
+    @media (max-width: 420px) {
+      body[data-role="guest"] #header-title::before,
+      body[data-role="guest"] #header-title::after {
+        font-size: 20px;
+      }
+
+      body[data-role="guest"] #header {
+        min-height: 106px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ 역할 선택 화면 ══ -->
+<div id="role-screen">
+  <div class="role-box">
+    <div class="role-logo">가/A</div>
+    <h1 class="role-title">실시간 한국어 → 베트남어</h1>
+    <p class="role-sub">Phiên dịch trực tiếp Hàn ↔ Việt</p>
+    <div class="role-cards">
+      <div class="role-card host" id="btn-host">
+        <div class="role-icon">🎤</div>
+        <div>
+          <div class="role-name">호스트 / Người trình bày</div>
+          <div class="role-desc">말하기, 번역 제어, 설정<br/>Nói, điều khiển dịch, cài đặt</div>
+        </div>
+      </div>
+      <div class="role-card guest" id="btn-guest">
+        <div class="role-icon">👥</div>
+        <div>
+          <div class="role-name">게스트 / Khách</div>
+          <div class="role-desc">자막 읽기 전용<br/>Chỉ xem phụ đề</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 메인 앱 ══ -->
+<div id="app">
+
+  <!-- Header -->
+  <div id="header">
+    <div id="header-left">
+      <div id="logo">▮▮▮</div>
+      <div>
+        <div id="header-title">실시간 한국어 ↔ 베트남어</div>
+        <div id="header-sub">Phiên dịch trực tiếp Hàn ↔ Việt</div>
+      </div>
+    </div>
+    <div id="header-right">
+      <span id="role-badge" class="role-badge"></span>
+      <div id="count-pill">번역 수<b id="count">0</b></div>
+      <div id="live-badge"><div id="live-dot"></div>LIVE</div>
+      <div id="conn-indicator" title="WebSocket 연결 상태"></div>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div id="body">
+
+    <!-- 호스트 전용 사이드바 -->
+    <div id="host-sidebar" class="hidden">
+
+      <!-- Groq API 키 -->
+      <div class="sidebar-section" id="api-section-wrap">
+        <div class="sidebar-title">🔧 API 키 입력</div>
+        <div class="api-form">
+          <div class="api-input-row">
+            <input id="apiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="gsk_..." />
+            <button id="saveApiBtn" class="api-btn" title="API 키 적용">저장</button>
+            <button id="deleteApiBtn" class="api-btn" title="저장된 API 키 삭제">삭제</button>
+          </div>
+          <div id="apiStatus" class="api-status pending">
+            <span class="api-status-dot"></span>
+            <span id="apiStatusText">API 키 대기 중</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 게스트 접속 주소 -->
+      <div class="sidebar-section" id="guest-link-wrap">
+        <div class="sidebar-title">🔗 게스트 링크</div>
+        <div class="guest-url-card">
+          <div class="url-stack">
+            <div>
+              <div class="mini-label">호스트 PC 전용 주소</div>
+              <div class="url-actions-row">
+                <div id="hostLocalUrl" class="guest-url">확인 중...</div>
+                <button id="copyLocalUrlBtn" class="copy-btn" title="호스트 주소 복사">복사</button>
+              </div>
+            </div>
+            <div>
+              <div class="mini-label">게스트 휴대폰 접속 주소</div>
+              <div class="url-actions-row">
+                <div id="guestUrl" class="guest-url">주소 확인 중...</div>
+                <button id="copyGuestUrlBtn" class="copy-btn" title="게스트 접속 주소 복사">복사</button>
+              </div>
+            </div>
+            <div class="qr-box">
+              <img id="guestQr" alt="게스트 접속 QR 코드" />
+              <div>
+                <div id="guestUrlNote" class="guest-url-note">게스트는 같은 Wi-Fi에서 아래 QR 또는 주소로 접속하세요.</div>
+                <div id="ipCandidates" class="ip-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 마이크 제어 -->
+      <div class="sidebar-section" id="mic-section-wrap">
+        <div class="sidebar-title">🎙 마이크 시작</div>
+        <div id="status-bar">
+          <div id="status-inner"></div>
+        </div>
+        <div style="margin-top: 10px;" id="mic-section">
+          <select id="audioDeviceSelect" class="select-control" title="마이크 장치 선택">
+            <option value="">마이크 장치 확인 중...</option>
+          </select>
+          <div class="guest-url-note" id="audioDeviceNote">선택한 마이크는 다음 실행 때도 복원됩니다.</div>
+          <select id="vadPresetSelect" class="select-control" title="무음 감지 프리셋">
+            <option value="quiet">조용한 방</option>
+            <option value="classroom">일반 강의실</option>
+            <option value="noisy">시끄러운 현장</option>
+          </select>
+          <div class="volume-meter" title="입력 볼륨">
+            <div id="volumeFill"></div>
+          </div>
+          <div class="guest-url-note">입력 볼륨 <span id="volumeValue">0%</span></div>
+          <button id="micToggleBtn" class="mic-btn">
+            <span id="micIcon">🎙️</span>
+            <span id="micBtnText">마이크 켜기 / Bật mic</span>
+          </button>
+          <button class="dl-btn" id="refreshAudioBtn">
+            <span>↻</span> 마이크 목록 새로고침
+          </button>
+          <button class="dl-btn" id="dlBtn">
+            <span>⬇️</span> 대화 다운로드 / Tải hội thoại
+          </button>
+        </div>
+      </div>
+
+      <!-- 수음 민감도 설정 -->
+      <div class="sidebar-section">
+        <div class="sidebar-title">음성 감도 설정</div>
+
+        <div class="ctrl-row">
+          <div class="ctrl-label">
+            <span>수음 민감도 / Độ nhạy</span>
+            <span class="ctrl-val" id="valVad">0.6</span>
+          </div>
+          <input type="range" id="sliderVad" min="0.1" max="0.95" step="0.05" value="0.6" />
+        </div>
+
+        <div class="ctrl-row">
+          <div class="ctrl-label">
+            <span>최소 볼륨 / Âm lượng tối thiểu</span>
+            <span class="ctrl-val" id="valVol">0.05</span>
+          </div>
+          <input type="range" id="sliderVol" min="0.01" max="0.3" step="0.01" value="0.05" />
+        </div>
+
+        <div class="ctrl-row">
+          <div class="ctrl-label">
+            <span>묵음 허용 / Thời gian im lặng</span>
+            <span class="ctrl-val" id="valPad">640ms</span>
+          </div>
+          <input type="range" id="sliderPad" min="5" max="60" step="1" value="20" />
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-title">운영 상태</div>
+        <div class="host-stat-grid">
+          <div class="host-stat">게스트<b id="guestCount">0</b></div>
+          <div class="host-stat">최근 처리<b id="lastLatency">-</b></div>
+          <div class="host-stat">세션 번역<b id="translationCount">0</b></div>
+          <div class="host-stat">앱 버전<b id="appVersion">-</b></div>
+        </div>
+      </div>
+
+      <div class="sidebar-section" id="diagnostics-wrap">
+        <div class="sidebar-title">진단 / Troubleshooting</div>
+        <div class="diag-actions">
+          <button id="refreshDiagBtn" class="copy-btn" title="진단 정보 새로고침">새로고침</button>
+          <button id="copyDiagBtn" class="copy-btn" title="진단 정보 복사">정보 복사</button>
+        </div>
+        <div id="diagnosticsBody">진단 정보를 불러오려면 새로고침을 누르세요.</div>
+      </div>
+
+    </div>
+
+    <!-- 채팅 영역 -->
+    <div id="chat-wrap">
+
+      <!-- 게스트 배너 -->
+      <div id="guest-banner" class="hidden">
+        <span>👁️</span>
+        <span>게스트 뷰 · 호스트의 발화 내용이 실시간으로 표시됩니다</span>
+      </div>
+
+      <div id="connection-help" class="connection-help hidden">
+        <div id="connectionHelpText"></div>
+        <button id="connectionDiagBtn" class="copy-btn">진단 정보 보기</button>
+      </div>
+
+      <div id="chat">
+        <div id="chat-top"></div>
+        <div id="empty">
+          <div class="e-icon">🇻🇳</div>
+          <div class="e-title">강의를 시작하면 자막이 여기에 표시됩니다</div>
+          <div class="e-sub">
+            Phụ đề sẽ xuất hiện ở đây khi bài giảng bắt đầu.<br/>
+            Vui lòng chờ giáo viên bắt đầu nói.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── 역할 상태 ─────────────────────────────────────────
+  let role = null; // 'host' | 'guest'
+  let ws, reconnTimer;
+  let count = 0;
+  let transcriptLog = []; // 다운로드용 누적 로그
+  let reconnectAttempts = 0;
+  let currentGuestUrl = '';
+  let currentLocalUrl = '';
+  let latestDiagnostics = null;
+  let sliderSetupDone = false;
+  let downloadSetupDone = false;
+
+  // ── DOM refs ──────────────────────────────────────────
+  const roleScreen   = document.getElementById('role-screen');
+  const appEl        = document.getElementById('app');
+  const chat         = document.getElementById('chat');
+  const connDot      = document.getElementById('conn-indicator');
+  const countEl      = document.getElementById('count');
+  const roleBadge    = document.getElementById('role-badge');
+  const hostSidebar  = document.getElementById('host-sidebar');
+  const guestBanner  = document.getElementById('guest-banner');
+  const statusBar    = document.getElementById('status-bar');
+  const statusEl     = document.getElementById('status-inner');
+  const micToggleBtn = document.getElementById('micToggleBtn');
+  const micIcon      = document.getElementById('micIcon');
+  const micBtnText   = document.getElementById('micBtnText');
+  const dlBtn        = document.getElementById('dlBtn');
+  const apiKeyInput  = document.getElementById('apiKeyInput');
+  const saveApiBtn   = document.getElementById('saveApiBtn');
+  const apiStatus    = document.getElementById('apiStatus');
+  const apiStatusText = document.getElementById('apiStatusText');
+  const guestUrlEl   = document.getElementById('guestUrl');
+  const guestUrlNote = document.getElementById('guestUrlNote');
+  const copyGuestUrlBtn = document.getElementById('copyGuestUrlBtn');
+  const hostLocalUrlEl = document.getElementById('hostLocalUrl');
+  const copyLocalUrlBtn = document.getElementById('copyLocalUrlBtn');
+  const guestQr = document.getElementById('guestQr');
+  const ipCandidates = document.getElementById('ipCandidates');
+  const deleteApiBtn = document.getElementById('deleteApiBtn');
+  const audioDeviceSelect = document.getElementById('audioDeviceSelect');
+  const audioDeviceNote = document.getElementById('audioDeviceNote');
+  const refreshAudioBtn = document.getElementById('refreshAudioBtn');
+  const vadPresetSelect = document.getElementById('vadPresetSelect');
+  const volumeFill = document.getElementById('volumeFill');
+  const volumeValue = document.getElementById('volumeValue');
+  const guestCountEl = document.getElementById('guestCount');
+  const lastLatencyEl = document.getElementById('lastLatency');
+  const translationCountEl = document.getElementById('translationCount');
+  const appVersionEl = document.getElementById('appVersion');
+  const refreshDiagBtn = document.getElementById('refreshDiagBtn');
+  const copyDiagBtn = document.getElementById('copyDiagBtn');
+  const diagnosticsBody = document.getElementById('diagnosticsBody');
+  const connectionHelp = document.getElementById('connection-help');
+  const connectionHelpText = document.getElementById('connectionHelpText');
+  const connectionDiagBtn = document.getElementById('connectionDiagBtn');
+
+  // 슬라이더
+  const sliderVad = document.getElementById('sliderVad');
+  const sliderVol = document.getElementById('sliderVol');
+  const sliderPad = document.getElementById('sliderPad');
+  const valVad    = document.getElementById('valVad');
+  const valVol    = document.getElementById('valVol');
+  const valPad    = document.getElementById('valPad');
+
+  // ── 역할 선택 ─────────────────────────────────────────
+  document.getElementById('btn-host').addEventListener('click', () => startAs('host'));
+  document.getElementById('btn-guest').addEventListener('click', handleGuestChoice);
+
+  const initialRole = new URLSearchParams(window.location.search).get('role');
+  if (initialRole === 'guest') {
+    startAs('guest');
+  } else if (initialRole === 'host') {
+    startAs('host');
+  }
+
+  function startAs(r) {
+    role = r;
+    document.body.dataset.role = r;
+    roleScreen.classList.add('hidden');
+    appEl.classList.add('visible');
+
+    roleBadge.textContent = r === 'host' ? '호스트 / Host' : '게스트 / Khách';
+    roleBadge.className = `role-badge ${r}`;
+
+    if (r === 'host') {
+      hostSidebar.classList.remove('hidden');
+      setupApiKey();
+      setupGuestLink();
+      setupAudioControls();
+      setupDiagnostics();
+    } else {
+      guestBanner.classList.remove('hidden');
+      setupGuestHelpers();
+    }
+
+    connect();
+    setupSliders();
+    setupDownload();
+  }
+
+  async function handleGuestChoice() {
+    const host = window.location.hostname;
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '';
+    if (!isLocal) {
+      startAs('guest');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/network', { cache: 'no-store' });
+      const data = await res.json();
+      window.location.href = data.guest_url;
+    } catch (e) {
+      startAs('guest');
+    }
+  }
+
+  // ── Groq API 키 설정 ─────────────────────────────────
+  let apiKeySetupDone = false;
+
+  function setupApiKey() {
+    if (apiKeySetupDone) return;
+    apiKeySetupDone = true;
+
+    saveApiBtn.addEventListener('click', sendApiKey);
+    deleteApiBtn.addEventListener('click', deleteApiKey);
+    apiKeyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendApiKey();
+    });
+    refreshApiStatus();
+  }
+
+  async function refreshApiStatus() {
+    try {
+      const res = await fetch('/api/api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'status' }),
+      });
+      const data = await res.json();
+      if (data.status?.configured) {
+        setApiStatus('ready', data.status.source === 'env' ? '환경변수 키 사용 중' : '저장된 API 키 사용 중');
+      }
+    } catch (e) {
+      // WebSocket status will fill this in after connection.
+    }
+  }
+
+  async function sendApiKey() {
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) {
+      setApiStatus('error', 'API 키를 입력해 주세요');
+      return;
+    }
+    setApiStatus('pending', 'API 키 확인 중');
+    try {
+      const res = await fetch('/api/api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set', api_key: apiKey, save: true, validate: true }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setApiStatus('error', data.message || 'API 키 확인 실패');
+        return;
+      }
+      apiKeyInput.value = '';
+      setApiStatus('ready', data.message || 'API 키가 저장되었습니다.');
+      refreshDiagnostics(false);
+    } catch (e) {
+      setApiStatus('error', 'API 키 저장 중 네트워크 오류가 발생했습니다.');
+    }
+  }
+
+  async function deleteApiKey() {
+    setApiStatus('pending', '저장된 API 키 삭제 중');
+    try {
+      const res = await fetch('/api/api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete' }),
+      });
+      const data = await res.json();
+      setApiStatus(data.ok ? 'pending' : 'error', data.message || 'API 키 삭제 완료');
+      refreshDiagnostics(false);
+    } catch (e) {
+      setApiStatus('error', 'API 키 삭제 중 오류가 발생했습니다.');
+    }
+  }
+
+  function setApiStatus(state, text) {
+    apiStatus.className = `api-status ${state}`;
+    apiStatusText.textContent = text;
+  }
+
+  // ── 게스트 접속 주소 ─────────────────────────────────
+  let guestLinkSetupDone = false;
+
+  function setupGuestLink() {
+    if (!guestLinkSetupDone) {
+      guestLinkSetupDone = true;
+      copyGuestUrlBtn.addEventListener('click', copyGuestUrl);
+      copyLocalUrlBtn.addEventListener('click', copyLocalUrl);
+    }
+    loadGuestUrl();
+  }
+
+  async function loadGuestUrl() {
+    try {
+      const res = await fetch('/api/network', { cache: 'no-store' });
+      const data = await res.json();
+      currentLocalUrl = data.local_url;
+      currentGuestUrl = data.guest_url;
+      hostLocalUrlEl.textContent = currentLocalUrl;
+      guestUrlEl.textContent = currentGuestUrl;
+      guestQr.src = `/api/qr?url=${encodeURIComponent(currentGuestUrl)}&t=${Date.now()}`;
+      guestUrlNote.textContent = '게스트는 같은 Wi-Fi에서 QR 또는 게스트 주소를 여세요. 127.0.0.1은 호스트 PC 전용입니다.';
+      ipCandidates.innerHTML = '';
+      (data.lan_ip_candidates || []).forEach((item) => {
+        const btn = document.createElement('button');
+        btn.className = `ip-chip${item.selected ? ' selected' : ''}`;
+        btn.textContent = `${item.selected ? '기본 ' : ''}${item.ip} · ${item.guest_url}`;
+        btn.addEventListener('click', () => {
+          currentGuestUrl = item.guest_url;
+          guestUrlEl.textContent = currentGuestUrl;
+          guestQr.src = `/api/qr?url=${encodeURIComponent(currentGuestUrl)}&t=${Date.now()}`;
+          copyGuestUrl();
+        });
+        ipCandidates.appendChild(btn);
+      });
+    } catch (e) {
+      currentGuestUrl = '';
+      currentLocalUrl = '';
+      hostLocalUrlEl.textContent = '주소 확인 실패';
+      guestUrlEl.textContent = '주소 확인 실패';
+      guestUrlNote.textContent = '호스트 PC의 IPv4 주소를 확인해서 http://IPv4:8000 으로 접속하세요.';
+    }
+  }
+
+  async function copyGuestUrl() {
+    if (!currentGuestUrl) return;
+    try {
+      await navigator.clipboard.writeText(currentGuestUrl);
+      guestUrlNote.textContent = '주소를 복사했습니다.';
+    } catch (e) {
+      const area = document.createElement('textarea');
+      area.value = currentGuestUrl;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+      guestUrlNote.textContent = '주소를 복사했습니다.';
+    }
+  }
+
+  async function copyLocalUrl() {
+    if (!currentLocalUrl) return;
+    await copyText(currentLocalUrl);
+    guestUrlNote.textContent = '호스트 PC 전용 주소를 복사했습니다.';
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      const area = document.createElement('textarea');
+      area.value = text;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+  }
+
+  // ── 마이크 장치 / 진단 ───────────────────────────────
+  let audioSetupDone = false;
+  function setupAudioControls() {
+    if (audioSetupDone) return;
+    audioSetupDone = true;
+    refreshAudioBtn.addEventListener('click', loadAudioDevices);
+    audioDeviceSelect.addEventListener('change', async () => {
+      const value = audioDeviceSelect.value;
+      audioDeviceNote.textContent = '마이크 설정 저장 중...';
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selected_input_device_index: value || null }),
+        });
+        const data = await res.json();
+        audioDeviceNote.textContent = data.message || (res.ok ? '마이크 설정을 저장했습니다.' : '마이크 설정 실패');
+        refreshDiagnostics(false);
+      } catch (e) {
+        audioDeviceNote.textContent = '마이크 설정 저장 중 오류가 발생했습니다.';
+      }
+    });
+    vadPresetSelect.addEventListener('change', async () => {
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vad_preset: vadPresetSelect.value }),
+        });
+        const data = await res.json();
+        if (data.config) applyConfig(data.config);
+      } catch (e) {
+        setStatus('error');
+      }
+    });
+    loadAudioDevices();
+  }
+
+  async function loadAudioDevices() {
+    audioDeviceSelect.innerHTML = '<option value="">기본 마이크 사용</option>';
+    try {
+      const res = await fetch('/api/audio/devices', { cache: 'no-store' });
+      const data = await res.json();
+      (data.devices || []).forEach((device) => {
+        const option = document.createElement('option');
+        option.value = String(device.index);
+        option.textContent = `${device.name}${device.is_default ? ' (Windows 기본)' : ''}`;
+        if (data.selected_input_device_index === device.index) option.selected = true;
+        audioDeviceSelect.appendChild(option);
+      });
+      const currentName = data.current?.current_input_device_name;
+      audioDeviceNote.textContent = currentName ? `현재 입력: ${currentName}` : '기본 입력 장치를 사용합니다.';
+    } catch (e) {
+      audioDeviceSelect.innerHTML = '<option value="">마이크 목록 실패</option>';
+      audioDeviceNote.textContent = '마이크 장치 목록을 가져오지 못했습니다.';
+    }
+  }
+
+  let diagnosticsSetupDone = false;
+  function setupDiagnostics() {
+    if (diagnosticsSetupDone) return;
+    diagnosticsSetupDone = true;
+    refreshDiagBtn.addEventListener('click', () => refreshDiagnostics(true));
+    copyDiagBtn.addEventListener('click', copyDiagnostics);
+    connectionDiagBtn.addEventListener('click', () => refreshDiagnostics(true));
+    refreshDiagnostics(false);
+  }
+
+  async function refreshDiagnostics(showPanel = true) {
+    try {
+      const res = await fetch('/api/diagnostics', { cache: 'no-store' });
+      latestDiagnostics = await res.json();
+      renderDiagnostics(latestDiagnostics);
+      if (showPanel && role === 'guest') {
+        connectionHelpText.innerHTML = `
+          <b>진단 정보</b><br/>
+          게스트 주소: ${esc(latestDiagnostics.network?.guest_url || '-')}<br/>
+          호스트 앱: ${latestDiagnostics.app?.version || '-'} / 포트 ${latestDiagnostics.network?.port || '-'}<br/>
+          최근 오류: ${(latestDiagnostics.recent_errors || []).length || 0}개<br/>
+          같은 Wi-Fi, 방화벽 개인 네트워크 허용, 회사/학교 Wi-Fi 차단 여부를 확인하세요.
+        `;
+        connectionHelp.classList.remove('hidden');
+      }
+    } catch (e) {
+      diagnosticsBody.textContent = '진단 정보를 가져오지 못했습니다. 서버가 실행 중인지 확인하세요.';
+    }
+  }
+
+  function renderDiagnostics(data) {
+    if (!data) return;
+    appVersionEl.textContent = data.app?.version || '-';
+    guestCountEl.textContent = data.websocket?.guest_count ?? '0';
+    translationCountEl.textContent = data.history?.translation_count ?? '0';
+    lastLatencyEl.textContent = data.history?.last_processing_ms ? `${data.history.last_processing_ms}ms` : '-';
+    diagnosticsBody.textContent = [
+      `앱: ${data.app?.product} ${data.app?.version} (${data.app?.build_type})`,
+      `OS: ${data.system?.os}`,
+      `호스트 PC 전용: ${data.network?.local_url}`,
+      `게스트 휴대폰: ${data.network?.guest_url}`,
+      `LAN 후보: ${(data.network?.lan_ip_candidates || []).map(x => x.ip).join(', ') || '-'}`,
+      `포트: ${data.network?.port} / 0.0.0.0 바인딩: ${data.network?.binds_all_interfaces ? '예' : '아니오'}`,
+      `게스트 수: ${data.websocket?.guest_count} / 번역 수: ${data.history?.translation_count}`,
+      `마이크: ${data.audio?.state?.current_input_device_name || '확인 중'}`,
+      `API 키: ${data.api_key?.configured ? '설정됨' : '미설정'} (${data.api_key?.source || 'none'})`,
+      '',
+      '최근 오류:',
+      ...(data.recent_errors || []).map(e => `- [${e.time}] ${e.category}: ${e.message}`),
+      '',
+      '접속 실패 체크:',
+      ...(data.network?.firewall_guidance || []).map(x => `- ${x}`),
+    ].join('\n');
+  }
+
+  async function copyDiagnostics() {
+    if (!latestDiagnostics) await refreshDiagnostics(false);
+    await copyText(diagnosticsBody.textContent);
+    copyDiagBtn.textContent = '복사됨';
+    setTimeout(() => { copyDiagBtn.textContent = '정보 복사'; }, 1200);
+  }
+
+  function setupGuestHelpers() {
+    connectionDiagBtn.addEventListener('click', () => refreshDiagnostics(true), { once: false });
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    }
+  }
+
+  // ── 슬라이더 설정 ──────────────────────────────────────
+  let sliderTimer = null;
+
+  function setupSliders() {
+    if (sliderSetupDone) return;
+    sliderSetupDone = true;
+    function onSliderChange() {
+      const vad = parseFloat(sliderVad.value);
+      const vol = parseFloat(sliderVol.value);
+      const pad = parseInt(sliderPad.value);
+
+      valVad.textContent = vad.toFixed(2);
+      valVol.textContent = vol.toFixed(2);
+      valPad.textContent = `${pad * 32}ms`;
+
+      clearTimeout(sliderTimer);
+      sliderTimer = setTimeout(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'update_config',
+            vad_threshold: vad,
+            min_volume: vol,
+            silence_padding: pad,
+            vad_preset: vadPresetSelect.value,
+          }));
+        }
+      }, 300);
+    }
+    sliderVad.addEventListener('input', onSliderChange);
+    sliderVol.addEventListener('input', onSliderChange);
+    sliderPad.addEventListener('input', onSliderChange);
+  }
+
+  // ── 다운로드 ───────────────────────────────────────────
+  function setupDownload() {
+    if (downloadSetupDone) return;
+    downloadSetupDone = true;
+    dlBtn.addEventListener('click', () => {
+      if (transcriptLog.length === 0) {
+        alert('아직 저장된 내용이 없습니다.');
+        return;
+      }
+      const lines = transcriptLog.map(d =>
+        `[${d.timestamp}] [${d.duration}s]\n` +
+        `🇰🇷 ${d.ko}\n` +
+        `🇻🇳 ${d.vn}\n`
+      );
+      const blob = new Blob(['실시간 한→베 번역 기록\n' + '='.repeat(40) + '\n\n' + lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `번역_${new Date().toISOString().slice(0,16).replace('T','_')}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // ── Status renderer ───────────────────────────────────
+  function setStatus(type) {
+    statusEl.innerHTML = '';
+    const configs = {
+      connecting:   { node: () => mkSpinner(),          text: '서버에 연결 중…',    color: '#818cf8' },
+      idle:         { node: () => mkDot('#22c55e'),      text: '대기 중 · Đang chờ', color: '#22c55e' },
+      recording:    { node: () => mkWave(),              text: '녹음 중… · Đang ghi âm…', color: '#ef4444' },
+      processing:   { node: () => mkSpinner('#f97316'),  text: '번역 처리 중… · Đang xử lý…', color: '#f97316' },
+      disconnected: { node: () => mkDot('#ef4444'),      text: '연결 끊김 — 재연결 중…', color: '#ef4444' },
+      error:        { node: () => mkDot('#ef4444'),      text: '오류 확인 필요', color: '#ef4444' },
+    };
+    const cfg = configs[type] || configs.idle;
+    const span = document.createElement('span');
+    span.textContent = cfg.text;
+    span.style.color = cfg.color;
+    span.style.fontWeight = '600';
+    statusEl.appendChild(cfg.node());
+    statusEl.appendChild(span);
+  }
+
+  function mkSpinner(color = '#818cf8') {
+    const d = document.createElement('div'); d.className = 'spinner';
+    d.style.borderTopColor = color; return d;
+  }
+  function mkDot(color) {
+    const d = document.createElement('div'); d.className = 'sdot';
+    d.style.background = color; d.style.boxShadow = `0 0 6px ${color}`; return d;
+  }
+  function mkWave() {
+    const d = document.createElement('div'); d.className = 'waveform';
+    d.innerHTML = '<span></span><span></span><span></span><span></span><span></span>'; return d;
+  }
+
+  // ── Escape HTML ───────────────────────────────────────
+  function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+
+  // ── Add bubble ────────────────────────────────────────
+  function addBubble(data) {
+    document.getElementById('empty')?.remove();
+    count++;
+    countEl.textContent = count;
+    transcriptLog.push(data);
+
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    b.innerHTML = `
+      <div class="row-ko">
+        <span class="badge badge-ko">한국어&nbsp;&nbsp;KO</span>
+        <div class="text-ko">${esc(data.ko)}</div>
+      </div>
+      <hr class="divider"/>
+      <div class="row-vn">
+        <span class="badge badge-vn">Tiếng Việt&nbsp;&nbsp;VI</span>
+        <div class="text-vn">${esc(data.vn)}</div>
+      </div>
+      <div class="meta">
+        <span>${data.timestamp}</span>
+        <div class="meta-dot"></div>
+        <span>${data.duration}초</span>
+        <div class="meta-dot"></div>
+        <span>#${data.id}</span>
+      </div>`;
+    chat.appendChild(b);
+    chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+  }
+
+  function applyConfig(msg) {
+    sliderVad.value = msg.vad_threshold;
+    sliderVol.value = msg.min_volume;
+    sliderPad.value = msg.silence_padding;
+    valVad.textContent = parseFloat(msg.vad_threshold).toFixed(2);
+    valVol.textContent = parseFloat(msg.min_volume).toFixed(2);
+    valPad.textContent = `${msg.silence_padding * 32}ms`;
+    if (msg.vad_preset && vadPresetSelect.value !== msg.vad_preset) {
+      vadPresetSelect.value = msg.vad_preset;
+    }
+  }
+
+  function updateVolume(msg) {
+    const peak = Math.max(0, Math.min(1, Number(msg.peak || 0)));
+    const pct = Math.round(peak * 100);
+    volumeFill.style.width = `${pct}%`;
+    volumeValue.textContent = `${pct}%`;
+  }
+
+  function updateStats(msg) {
+    guestCountEl.textContent = msg.guest_count ?? 0;
+    translationCountEl.textContent = msg.translation_count ?? count;
+    lastLatencyEl.textContent = msg.last_processing_ms ? `${msg.last_processing_ms}ms` : '-';
+  }
+
+  function showConnectionHelp(reason) {
+    const url = window.location.href;
+    const localWarning = url.includes('127.0.0.1') || url.includes('localhost');
+    connectionHelpText.innerHTML = `
+      <b>${esc(reason)}</b><br/>
+      확인할 것: 호스트 앱 실행 여부, 같은 Wi-Fi 연결, Windows 방화벽 개인 네트워크 허용, 포트 8000,
+      회사/학교 Wi-Fi의 기기 간 통신 차단 여부${localWarning ? ', 게스트 휴대폰에서 127.0.0.1 주소를 열지 않았는지' : ''}.
+    `;
+    connectionHelp.classList.remove('hidden');
+  }
+
+  // ── WebSocket ─────────────────────────────────────────
+  function connect() {
+    if (role === 'host') setStatus('connecting');
+    connDot.className = '';
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const path  = role === 'host' ? '/ws/host' : '/ws/guest';
+    ws = new WebSocket(`${proto}//${window.location.host}${path}`);
+
+    ws.onopen = () => {
+      clearTimeout(reconnTimer);
+      reconnectAttempts = 0;
+      connDot.className = 'on';
+      connectionHelp.classList.add('hidden');
+      if (role === 'host') setStatus('idle');
+    };
+
+    ws.onmessage = ({ data }) => {
+      const msg = JSON.parse(data);
+      if (msg.type === 'result') {
+        addBubble(msg);
+      } else if (msg.type === 'status' && role === 'host') {
+        setStatus(msg.status);
+      } else if (msg.type === 'api_status' && role === 'host') {
+        if (msg.configured) {
+          const label = msg.source === 'env' ? '환경변수 키 사용 중' : `${msg.saved ? '저장된 ' : ''}API 키 연결됨`;
+          setApiStatus('ready', label);
+        } else {
+          setApiStatus(msg.error ? 'error' : 'pending', msg.error || 'API 키 대기 중');
+        }
+      } else if (msg.type === 'api_error' && role === 'host') {
+        setApiStatus('error', msg.message || 'Groq API 오류');
+        setStatus('idle');
+      } else if (msg.type === 'mic_status' && role === 'host') {
+        if (msg.muted) {
+          micToggleBtn.classList.add('muted');
+          micBtnText.textContent = '마이크 꺼짐 / Tắt mic';
+          micIcon.textContent = '🔇';
+          setStatus('idle');
+        } else {
+          micToggleBtn.classList.remove('muted');
+          micBtnText.textContent = '마이크 켜기 / Bật mic';
+          micIcon.textContent = '🎙️';
+        }
+      } else if (msg.type === 'config' && role === 'host') {
+        applyConfig(msg);
+      } else if (msg.type === 'volume' && role === 'host') {
+        updateVolume(msg);
+      } else if (msg.type === 'stats' && role === 'host') {
+        updateStats(msg);
+      } else if (msg.type === 'error') {
+        if (role === 'host') setStatus('error');
+        showConnectionHelp(msg.message || '오류가 발생했습니다.');
+      }
+    };
+
+    ws.onclose = () => {
+      connDot.className = 'off';
+      if (role === 'host') setStatus('disconnected');
+      reconnectAttempts++;
+      const delay = Math.min(10000, 1000 + reconnectAttempts * 1200);
+      showConnectionHelp(`서버 연결이 끊겼습니다. ${Math.round(delay / 1000)}초 후 재연결을 시도합니다. (${reconnectAttempts}회)`);
+      reconnTimer = setTimeout(connect, delay);
+    };
+
+    ws.onerror = () => {
+      showConnectionHelp('WebSocket 연결에 실패했습니다.');
+      ws.close();
+    };
+  }
+
+  // 마이크 버튼 (호스트 전용)
+  micToggleBtn.addEventListener('click', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'control', command: 'toggle_mic' }));
+    }
+  });
+</script>
+</body>
+</html>
